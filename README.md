@@ -1,6 +1,6 @@
 # Predicting 5-Year Breast-Cancer Survival: Does Gene Expression Add Value Over Clinical Data?
 
-A machine-learning study on the public **METABRIC** breast-cancer cohort, evaluating whether a PAM50 gene-expression signature improves 5-year overall-survival prediction beyond standard clinicopathologic variables. The repository is organised in two parts: a **Background and Summary** intended to be readable without a technical background, followed by a formal **Methods, Results, and Discussion** section. This is a personal research project and is not a clinical decision tool.
+A machine-learning study on the public **METABRIC** breast-cancer cohort evaluating whether a PAM50 gene-expression signature improves 5-year overall-survival prediction beyond standard clinicopathologic variables. PAM50 is a validated 50-gene panel that classifies breast tumours into intrinsic molecular subtypes. The repository is organised in two parts: a **Background and Summary** intended to be readable without a technical background, followed by a formal **Methods, Results, and Discussion** section. This is a personal research project and is not a clinical decision tool.
 
 ---
 
