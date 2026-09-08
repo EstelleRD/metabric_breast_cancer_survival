@@ -148,6 +148,6 @@ METABRIC data: Curtis et al. (*Nature*, 2012) and Pereira et al. (*Nature Commun
 
 Code is released under the MIT License (see [`LICENSE`](LICENSE)). METABRIC data are subject to the terms of their original providers and are not redistributed here.
 
-**‹Estelle RD›** 
+**EstelleRD** 
 
 *This is a personal research project for educational purposes. It does not constitute medical advice and is not a clinical decision tool.*
