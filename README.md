@@ -140,17 +140,6 @@ Two conclusions follow. First, a full clinicopathologic model provides a small b
 - Findings derive from a single cohort; external validation (e.g. TCGA-BRCA) was not performed.
 - Dichotomisation of survival at five years discards time-to-event information that a survival model would retain.
 
-## Skills demonstrated
-
-- Construction of an end-to-end applied machine-learning pipeline on real biomedical data, including table joins, missing-data handling, and class imbalance.
-- Rigorous problem formulation, including principled treatment of censored outcomes.
-- Explicit control of target leakage and confounding in feature selection.
-- Gradient-boosted modelling with appropriate regularisation, imbalance correction, and cross-validated model selection.
-- Threshold-independent evaluation with confidence intervals and an appropriate paired significance test.
-- Model interpretability via SHAP.
-- A resampling-based robustness analysis, accompanied by explicit reasoning regarding its statistical interpretation.
-- Publication-quality visualisation and transparent reporting of a partially null result.
-
 ## Data and code availability
 
 METABRIC data: Curtis et al. (*Nature*, 2012) and Pereira et al. (*Nature Communications*, 2016), accessed via cBioPortal (Cerami et al. 2012; Gao et al. 2013). The PAM50 signature: Parker et al. (*Journal of Clinical Oncology*, 2009). The Nottingham Prognostic Index: Galea et al. (1992). Methods: XGBoost (Chen & Guestrin, 2016) and SHAP (Lundberg & Lee, 2017). Analysis code is provided in this repository; data must be obtained from cBioPortal as described in [`data/README.md`](data/README.md).
@@ -159,6 +148,6 @@ METABRIC data: Curtis et al. (*Nature*, 2012) and Pereira et al. (*Nature Commun
 
 Code is released under the MIT License (see [`LICENSE`](LICENSE)). METABRIC data are subject to the terms of their original providers and are not redistributed here.
 
-**‹YOUR NAME›** — ‹contact / GitHub / LinkedIn›
+**‹Estelle RD›** 
 
 *This is a personal research project for educational purposes. It does not constitute medical advice and is not a clinical decision tool.*
