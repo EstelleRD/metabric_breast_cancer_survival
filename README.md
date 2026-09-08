@@ -140,13 +140,10 @@ Two conclusions follow. First, a full clinicopathologic model provides a small b
 - Findings derive from a single cohort; external validation (e.g. TCGA-BRCA) was not performed.
 - Dichotomisation of survival at five years discards time-to-event information that a survival model would retain.
 
-## Data and code availability
+## References, data and code availability
 
-METABRIC data: Curtis et al. (*Nature*, 2012) and Pereira et al. (*Nature Communications*, 2016), accessed via cBioPortal (Cerami et al. 2012; Gao et al. 2013). The PAM50 signature: Parker et al. (*Journal of Clinical Oncology*, 2009). The Nottingham Prognostic Index: Galea et al. (1992). Methods: XGBoost (Chen & Guestrin, 2016) and SHAP (Lundberg & Lee, 2017). Analysis code is provided in this repository; data must be obtained from cBioPortal as described in [`data/README.md`](data/README.md).
+METABRIC data: Curtis et al. (*Nature*, 2012) and Pereira et al. (*Nature Communications*, 2016), accessed via cBioPortal (Cerami et al. 2012; Gao et al. 2013). The PAM50 signature: Parker et al. (*Journal of Clinical Oncology*, 2009). The Nottingham Prognostic Index: Galea et al. (1992). Methods: XGBoost (Chen & Guestrin, 2016) and SHAP (Lundberg & Lee, 2017). Analysis code is provided in this repository; data must be obtained from cBioPortal.
 
-## License and author
-
-Code is released under the MIT License (see [`LICENSE`](LICENSE)). METABRIC data are subject to the terms of their original providers and are not redistributed here.
 
 **EstelleRD** 
 
