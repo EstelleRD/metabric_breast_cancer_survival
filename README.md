@@ -1,87 +1,123 @@
-# Predicting 5-Year Breast-Cancer Survival: Does Gene Expression Add Value Over Clinical Data?
+# Can Machine Learning Predict Breast-Cancer Survival — and Do Genes Help?
 
-A reproducible machine-learning study on the **METABRIC** breast-cancer cohort, asking a question that matters in practice: once you already have a patient's standard clinical variables, **does adding PAM50 gene-expression data actually improve prognosis prediction?** The project is built around gradient-boosted trees (XGBoost), rigorous validation, SHAP interpretability, and honest reporting — including a robustness check that changes the conclusion.
-
-> **Headline finding.** On a held-out test set, a clinicopathologic XGBoost model reached **AUROC 0.778** versus **0.754** for the Nottingham Prognostic Index (NPI) alone; adding the 50-gene PAM50 panel raised it to **0.798**. Repeated cross-validation (25 splits) then showed that the **clinical model robustly beats NPI** (mean ΔAUROC **+0.036**, better in **100%** of splits) — but **PAM50 adds no robust improvement over clinical data** (mean ΔAUROC **+0.006**, 95% interval spanning zero, better in only **68%** of splits). In this cohort, a rich clinical panel improves on the classic index, while gene expression is largely redundant with variables clinicians already record.
+A personal machine-learning project on a real, public breast-cancer dataset. It has two layers: a plain-language walkthrough of the question and findings (below), and a full **technical section** further down covering the pipeline, modelling and statistics. Nothing here is a clinical tool — it's a portfolio project about doing applied ML carefully and reporting it honestly.
 
 ---
 
-## Why this project
+# Part 1 — The project in plain language
 
-- **Clinically motivated question.** "Incremental value of genomics over clinical data" is a recurring question in precision oncology, and one where the literature is biased toward positive results. A clean, honest answer either way is genuinely useful.
-- **As an ML portfolio piece**, it demonstrates: a leakage-aware pipeline, a proper baseline, correct handling of censored survival data, threshold-independent evaluation with confidence intervals, model interpretability with SHAP, a robustness analysis with repeated CV, and careful statistical reasoning about what the single-split and repeated-CV results each can and cannot say.
+## The story in one paragraph
+
+When someone is diagnosed with breast cancer, doctors estimate how the disease is likely to progress. For decades they've used simple scores based on tumour size, how aggressive the cells look, and whether the cancer has spread to lymph nodes. More recently it's become possible to also read the tumour's **gene activity**. The natural question: **does adding genetic information actually help predict who will survive — or do the standard clinical measurements already tell you most of what you need to know?** That's what this project tests.
+
+## The data
+
+The project uses **METABRIC**, a well-known public breast-cancer dataset (~2,500 patients from the UK and Canada). For each patient it includes standard **clinical information** (age, tumour size, grade, stage, hormone-receptor status, treatments), **gene-activity ("expression") data** (a molecular readout of how active thousands of genes are), and the **outcome** (whether and when the patient died). It's free to download from [cBioPortal](https://www.cbioportal.org/study/summary?id=brca_metabric); only the raw sequencing files are restricted, and no patient data is stored in this repo.
+
+**Who's in the analysis:** the **1,916 patients** who had both gene-activity data and a clear 5-year outcome (1,489 alive at five years, 427 died).
+
+## The aim
+
+Predict whether a patient would **survive five years**, and compare three approaches:
+
+1. **NPI only** — the classic clinical score (Nottingham Prognostic Index) as a single number. The simple baseline.
+2. **Clinical** — a machine-learning model using the *full* set of standard clinical measurements.
+3. **Clinical + genes** — the same model, also given a well-known 50-gene signature (PAM50).
+
+The key question is whether #3 beats #2 — whether genes add anything on top of clinical data.
+
+## Two ideas you'll need
+
+**AUROC** — a score from 0.5 to 1.0. Pick a patient who died and one who survived at random; a good model gives the one who died the higher risk score. AUROC is how often it gets that ranking right. **0.5** = guessing, **1.0** = perfect, **~0.75–0.80** (where this lands) = useful but imperfect, roughly "right 4 times out of 5."
+
+**The p-value** — when one model scores a bit higher, is that real or just luck from which patients landed in the test set? A **small p-value (< 0.05)** means the difference is probably real; a large one means it could be chance.
+
+## What I found
+
+**First look (one split):**
+
+| Contestant | AUROC |
+|-----------|-------|
+| NPI only | 0.754 |
+| Clinical | 0.778 |
+| Clinical + genes | 0.798 |
+
+![The three models compared](clinical_pam50/roc_clinical_vs_pam50.png)
+
+Each step adds a little, but the gaps are small. This chart shows what the model leaned on — the usual clinical factors (age, tumour size, nodes, receptor status) dominate; genes play a minor role.
+
+![What the model paid attention to](clinical_pam50/shap_both_beeswarm.png)
+
+**Second look (repeating 25 times, to avoid being fooled by one lucky split):**
+
+- **Full clinical data beat the old NPI score in all 25 of 25 runs** — small but consistent and real.
+- **Adding genes beat clinical-alone in only 68% of runs**, by an amount indistinguishable from noise.
+
+![Scores across 25 repeats](clinical_pam50_cv/auroc_boxplot_repcv.png)
+![How much the genes helped (centred near zero)](clinical_pam50_cv/delta_auroc_pam50_repcv.png)
+
+## The bottom line
+
+A fuller set of clinical measurements reliably beats the classic single-number score — while the PAM50 gene signature did **not** meaningfully improve predictions once clinical data was included. That matches a lot of published research: much of what genes "say" about prognosis is already reflected in what doctors measure. Slightly anticlimactic — but reporting it honestly, rather than over-hyping a tiny difference, is the point.
 
 ---
 
-## The question, in three steps
+# Part 2 — Technical write-up
 
-1. **Baseline vs model.** Can XGBoost on the full clinicopathologic feature set beat the single established index (NPI)?
-2. **Does genomics help?** Does adding PAM50 gene expression to the clinical model improve discrimination? *(the core test — same model class, nested feature sets)*
-3. **Is any gain robust?** Does the effect survive repeated resampling, or is it an artifact of one lucky train/test split?
+## Problem framing
 
----
+Right-censored survival is reframed as **binary classification at a 5-year horizon**: died within 60 months → `1`; known alive at ≥60 months (or died later) → `0`. Patients **censored before 60 months** (alive but with shorter follow-up) have unknown 5-year status and are **excluded rather than imputed** — labelling them as survivors would inject systematic label noise. This is the most consequential modelling decision in the pipeline. (A time-to-event model such as Cox or XGBoost-AFT would use the discarded follow-up time; that's noted as a limitation.)
 
-## Data
+## Data pipeline
 
-- **Cohort:** METABRIC (Molecular Taxonomy of Breast Cancer International Consortium) — 2,509 clinically annotated tumours in this release, with gene expression, CNA and mutation data.
-- **Source:** [cBioPortal — `brca_metabric`](https://www.cbioportal.org/study/summary?id=brca_metabric).
-- **Files used:** `data_clinical_patient.txt`, `data_clinical_sample.txt`, `data_mrna_illumina_microarray.txt` (Illumina HT-12 microarray expression).
-- **Analysis cohort:** patients with a determinable 5-year survival status **and** available expression data → **1,916 patients** (1,489 survived, 427 died within 5 years). All models are trained and evaluated on this **same** cohort so comparisons are fair.
+- **Sources:** cBioPortal `brca_metabric` — `data_clinical_patient.txt`, `data_clinical_sample.txt`, `data_mrna_illumina_microarray.txt`.
+- **Join:** patient and sample clinical tables merged on `PATIENT_ID`; the expression matrix (genes × samples) is transposed and linked to patients via `SAMPLE_ID`.
+- **Gotcha handled:** expression columns are sample IDs like `MB-0000`. Reading with `check.names = FALSE` prevents R from silently rewriting them to `MB.0000`, which would break the join and yield an empty cohort.
+- **Shared cohort:** all models run on the **same 1,916 patients** — those with a determinable 5-year label *and* available expression — so feature-set comparisons aren't confounded by different populations.
 
-**Licensing / ethics.** The processed METABRIC data on cBioPortal (clinical tables and expression matrices) is publicly available; only the raw sequencing reads are under controlled access. No patient-level data is redistributed in this repository — see [`data/README.md`](data/README.md) for how to download it yourself.
+## Feature engineering
 
----
+- **Clinical (57 columns one-hot encoded):** age, tumour size, positive nodes, grade, stage, NPI, cellularity, ER/PR/HER2 status, menopausal state, treatments, surgery type, histology.
+- **Genomic:** the PAM50 signature; **49/50 genes matched** the array annotation (`ORC6L` is an alias of `ORC6`, absent under that symbol — not missing data). Combined matrix = **106 columns**.
+- **Custom one-hot encoder** preserves `NA` as `NA` (not a spurious category), letting XGBoost use its native missing-value handling rather than forcing imputation.
+- **Leakage control:** identifiers and outcome-derived fields (`OS_MONTHS`, `OS_STATUS`, `VITAL_STATUS`) are never features.
+- **Confound control:** the expression-derived classifiers `CLAUDIN_SUBTYPE`, `THREEGENE` and `INTCLUST` are **deliberately excluded** from the "clinical" set — otherwise "clinical" would already contain genomic information, invalidating the clinical-vs-genomic comparison.
 
-## Methods
+## Models
 
-**Outcome.** Binary 5-year overall survival. Deaths within 60 months → `1`; patients known to be alive at ≥60 months (or who died later) → `0`. Patients **censored before 5 years** (alive but with <60 months follow-up) have unknown status and are **dropped rather than guessed** — a common and consequential source of label noise if handled naively.
+| Model | Algorithm | Feature set |
+|-------|-----------|-------------|
+| NPI only | Logistic regression | NPI (1 predictor) |
+| Clinical | XGBoost | clinicopathologic (57) |
+| Clinical + PAM50 | XGBoost | clinical + genes (106) |
 
-**Features.**
-- *Clinicopathologic:* age at diagnosis, tumour size, positive lymph nodes, grade, stage, NPI, cellularity, ER/PR/HER2 status, menopausal state, treatments (hormone/radio/chemo), surgery type, histology. → 57 columns after one-hot encoding.
-- *Genomic:* the PAM50 genes (Parker et al. 2009) from the expression matrix. **49 of 50** matched the array annotation (the 50th, `ORC6L`, is an alias of `ORC6` and simply absent under that symbol — not missing data). → 106 columns with expression added.
-- **Deliberately excluded from "clinical":** `CLAUDIN_SUBTYPE`, `THREEGENE`, `INTCLUST` — these are themselves **derived from expression/CNA**, so including them would smuggle genomic information into the "clinical" model and confound the very comparison we are making.
+**XGBoost configuration:** `objective = binary:logistic`, `eval_metric = auc`, `max_depth = 4`, `eta = 0.05`, `subsample = 0.8`, `colsample_bytree = 0.8`, `min_child_weight = 5`. Shallow trees + low learning rate + row/column subsampling are chosen to limit overfitting on a modest-sized cohort.
 
-**Models.**
+**Class imbalance** (~3.5:1 survivors:deaths) handled with `scale_pos_weight` set to the training-set negative/positive ratio, so the minority "death" class isn't ignored.
 
-| # | Name | Model | Features |
-|---|------|-------|----------|
-| 1 | NPI only | Logistic regression | NPI (1 variable) |
-| 2 | Clinical | XGBoost | clinicopathologic (57) |
-| 3 | Clinical + PAM50 | XGBoost | clinicopathologic + 49 genes (106) |
+**Model selection:** number of boosting rounds chosen by **5-fold cross-validation with early stopping** (up to 1000 rounds, stop after 30 without AUC improvement) — no manually fixed `nrounds`.
 
-**Validation & metrics.** Stratified 80/20 split; XGBoost rounds chosen by 5-fold CV with early stopping; class imbalance handled via `scale_pos_weight`. Reported: **AUROC with 95% CI** (threshold-independent), **DeLong's test** for paired AUROC differences on identical patients, and **SHAP** for interpretability. A **repeated-CV** analysis (25 stratified splits) then tests stability.
+## Evaluation
 
-**Guardrails against common mistakes.** Identifiers and outcome-derived fields (`OS_MONTHS`, `OS_STATUS`, `VITAL_STATUS`) are never used as features (leakage); all three models are compared on the **same test patients**; sample IDs are read with `check.names = FALSE` so `MB-0000`-style keys aren't silently mangled.
+- **Metric:** AUROC (threshold-independent — appropriate under class imbalance), reported with **95% confidence intervals** (`pROC::ci.auc`, DeLong variance).
+- **Significance:** **DeLong's paired test** for correlated ROC curves, always computed on the **same held-out patients** for both models so the comparison is truly paired.
+- **Held-out discipline:** stratified 80/20 split; all metrics on patients unseen during training.
 
----
+Single-split results:
 
-## Results
-
-### 1–2. Single held-out test set (n = 1,916 shared cohort)
-
-| Model | Features | AUROC (95% CI) |
-|-------|----------|----------------|
-| NPI only (logistic) | 1 | **0.754** (0.694–0.813) |
-| XGBoost | clinicopathologic | **0.778** (0.722–0.833) |
-| XGBoost | clinical + PAM50 | **0.798** (0.745–0.851) |
-
-DeLong tests (paired, same patients):
-
-| Comparison | ΔAUROC | *p* |
-|------------|--------|-----|
+| Comparison | ΔAUROC | DeLong *p* |
+|------------|--------|-----------|
 | Clinical vs NPI | +0.024 | 0.300 |
-| **Clinical + PAM50 vs Clinical** *(key test)* | +0.021 | 0.195 |
+| Clinical + PAM50 vs Clinical *(key test)* | +0.021 | 0.195 |
 | Clinical + PAM50 vs NPI | +0.045 | **0.040** |
 
-![ROC — three models](clinical_pam50/roc_clinical_vs_pam50.png)
+## Interpretability
 
-On this single split, only the *cumulative* clinical+PAM50 model significantly beats the bare NPI index (p = 0.040); neither incremental step (clinical over NPI, or PAM50 over clinical) is individually significant, and the ROC curves for the two XGBoost models are nearly superimposed. A single split is noisy, though — see the repeated-CV analysis below, which resolves the ambiguity.
+**SHAP** (`shapviz`) on the clinical+PAM50 model quantifies each feature's contribution to individual predictions. Standard clinical variables dominate the ranking; PAM50 genes contribute marginally — mechanistic support for the quantitative finding that expression is largely redundant with clinical data here.
 
-**SHAP (clinical + PAM50 model).** Standard clinical drivers (age, tumour size/nodes, receptor status) dominate; PAM50 genes contribute modestly — consistent with expression being largely correlated with, rather than additive to, clinical variables.
+## Robustness: repeated cross-validation
 
-![SHAP summary](clinical_pam50/shap_both_beeswarm.png)
-
-### 3. Repeated cross-validation (25 stratified splits) — the robustness check
+A single 80/20 split is high-variance, so the experiment is repeated over **25 stratified splits** (reproducible per-repeat seeds). For speed, `nrounds` is tuned once per feature set (clinical = 59, +PAM50 = 56) and held fixed across repeats — applied equally to both XGBoost models, so the *comparison* stays fair.
 
 | Model | Mean AUROC (2.5–97.5%) |
 |-------|------------------------|
@@ -89,7 +125,7 @@ On this single split, only the *cumulative* clinical+PAM50 model significantly b
 | Clinical | 0.759 (0.708–0.814) |
 | Clinical + PAM50 | 0.765 (0.717–0.807) |
 
-Paired ΔAUROC across splits (positive = first model better):
+Paired ΔAUROC across splits:
 
 | Comparison | mean ΔAUROC | 2.5–97.5% | win-rate |
 |------------|-------------|-----------|----------|
@@ -97,88 +133,50 @@ Paired ΔAUROC across splits (positive = first model better):
 | PAM50 + clinical vs clinical | +0.006 | −0.034 to +0.033 | 68% |
 | PAM50 + clinical vs NPI | +0.042 | +0.006 to +0.085 | 100% |
 
-![AUROC across repeats](clinical_pam50_cv/auroc_boxplot_repcv.png)
-![ΔAUROC distribution](clinical_pam50_cv/delta_auroc_pam50_repcv.png)
+**Statistical reasoning that matters here:** the repeats share overlapping training data and are **not independent**, so I deliberately do **not** compute a p-value from the 25 differences (a paired t-test would badly overstate significance). Repeated CV is used to assess the **stability** of the estimate; the DeLong test remains the formal per-patient significance test. The two are complementary — and here they resolve the single split's ambiguity: clinical-over-NPI (only p = 0.30 on one split) turns out robust across all 25 repeats, while PAM50-over-clinical stays within noise. The repeated-CV means also sit below the single split, showing that split (seed 42) was mildly optimistic.
 
-The repeated analysis sharpens the conclusion:
+## Reproducibility
 
-- **Clinical robustly beats NPI.** The mean gain is +0.036, the interval excludes zero, and the clinical model wins in **every** split. The single-split DeLong (p = 0.30) simply lacked power on one partition.
-- **PAM50 does not robustly help.** Its edge over the clinical model averages just +0.006, the interval straddles zero, and it wins only 68% of the time — indistinguishable from noise.
-
-> **Statistical note.** The repeats share overlapping training data and are **not independent**, so no *p*-value is derived from them — repeated CV characterises the **stability** of the estimate, while the single-split DeLong test provides the formal paired significance test. The two are complementary: here, repeated CV reveals that the clinical-over-NPI gain (ambiguous on one split) is in fact robust, while the PAM50-over-clinical gain is not. (Mean AUROCs are also slightly lower than the single split, indicating that particular seed was a mildly favourable partition — another reason to trust the averaged estimate.)
-
----
-
-## Interpretation
-
-Two clear messages emerge. First, **a full clinicopathologic model reliably outperforms the single NPI index** — a modest but consistent gain (≈ +0.03–0.04 AUROC) that XGBoost extracts from the richer feature set. Second, **PAM50 gene expression provides no robust incremental discrimination beyond those clinical variables** for 5-year survival in METABRIC. This is consistent with the well-documented observation that much of the prognostic signal in gene-expression signatures is correlated with grade, size, nodal status and receptor status — information clinicians already have.
-
-## Limitations
-
-- **Power.** Even at n ≈ 1,900, resolving AUROC differences of ~0.02 is hard; "not detected" for PAM50 is not "proven absent."
-- **PAM50 is a fixed 49/50-gene panel**, so this tests that specific signature — not "expression in general." A top-variance or full-transcriptome model could behave differently.
-- **Single cohort.** No external validation (e.g. TCGA-BRCA); generalisation is untested.
-- **Dichotomising survival at 5 years** discards time-to-event information a Cox/AFT model would use.
-
----
-
-## Reproducing this analysis
-
-```r
-# 1. Install dependencies (once)
-install.packages(c("xgboost", "shapviz", "pROC", "ggplot2", "data.table"))
-
-# 2. Download METABRIC into data/  (see data/README.md)
-
-# 3. Run
-source("R/01_clinical_vs_npi_vs_pam50.R")   # analyses 1 & 2 + ROC + SHAP
-source("R/02_repeated_cv.R")                # analysis 3 (robustness)
-```
-
-Figures and metrics are written to `outputs/`. A fixed `set.seed(42)` and per-repeat seeds make results reproducible. For fully pinned package versions, initialise [`renv`](https://rstudio.github.io/renv/) (`renv::init()`) and commit the resulting `renv.lock`.
-
-## Repository structure
+Fixed global seed plus per-repeat seeds; results regenerate deterministically. Written in R with `xgboost`, `shapviz`, `pROC`, `ggplot2`, `data.table`. Data is not committed (see [`data/README.md`](data/README.md) for how to obtain it).
 
 ```
 metabric-survival-ml/
-├── README.md
-├── LICENSE
-├── .gitignore
-├── data/
-│   └── README.md          # how to obtain METABRIC (data is NOT committed)
 ├── R/
-│   ├── 01_clinical_vs_npi_vs_pam50.R
-│   └── 02_repeated_cv.R
-└── outputs/               # generated figures (committed so the README renders)
-    ├── roc_clinical_vs_pam50.png
-    ├── shap_both_beeswarm.png
-    ├── auroc_boxplot_repcv.png
-    └── delta_auroc_pam50_repcv.png
+│   ├── 01_clinical_vs_npi_vs_pam50.R   # main comparison + ROC + SHAP
+│   └── 02_repeated_cv.R                # 25-repeat robustness analysis
+├── clinical_pam50/                     # figures from the main run
+├── clinical_pam50_cv/                  # figures from the repeated run
+└── data/                               # data not included
 ```
-*(Map your existing script filenames to `R/01_…` and `R/02_…`. Copy the four figures into `outputs/` — the repeated-CV PNGs are in your `…/clinical_pam50_cv/` folder.)*
 
-## Requirements
+## Skills demonstrated
 
-- R ≥ 4.1
-- `xgboost`, `shapviz`, `pROC`, `ggplot2`, `data.table`
+- End-to-end applied-ML pipeline on real, messy biomedical data (joins, missingness, imbalance).
+- Careful problem framing: censored survival → binary classification with correct handling of unknown outcomes.
+- Leakage and confounding awareness (excluding outcome-derived and expression-derived features).
+- Gradient boosting with sensible regularisation and imbalance handling; principled model selection via cross-validation.
+- Correct, threshold-independent evaluation with confidence intervals and an appropriate paired significance test.
+- Model interpretability with SHAP.
+- A robustness design (repeated CV) and — importantly — the statistical judgement to know what it can and cannot claim.
+- Publication-quality visualisation and honest reporting of a partly null result.
 
-## References
+---
 
-1. Curtis C, et al. *The genomic and transcriptomic architecture of 2,000 breast tumours reveals novel subgroups.* Nature. 2012;486:346–352.
-2. Pereira B, et al. *The somatic mutation profiles of 2,433 breast cancers refine their genomic and transcriptomic landscapes.* Nat Commun. 2016;7:11479.
-3. Parker JS, et al. *Supervised risk predictor of breast cancer based on intrinsic subtypes (PAM50).* J Clin Oncol. 2009;27:1160–1167.
-4. Galea MH, et al. *The Nottingham Prognostic Index in primary breast cancer.* Breast Cancer Res Treat. 1992;22:207–219.
-5. Cerami E, et al. *The cBioPortal for Cancer Genomics.* Cancer Discov. 2012;2:401–404.
-6. Gao J, et al. *Integrative analysis of complex cancer genomics and clinical profiles using the cBioPortal.* Sci Signal. 2013;6:pl1.
-7. Chen T, Guestrin C. *XGBoost: A Scalable Tree Boosting System.* KDD 2016.
-8. Lundberg SM, Lee S-I. *A Unified Approach to Interpreting Model Predictions (SHAP).* NeurIPS 2017.
+## Limitations
 
-## License
+- ~1,900 patients limits power to detect small AUROC gaps; "genes didn't help" means "no clear help detected," not "never helps."
+- Tests one fixed 50-gene signature, not expression in general.
+- Single cohort — no external validation (e.g. TCGA-BRCA).
+- 5-year dichotomisation discards time-to-event information.
 
-Code released under the MIT License (see [`LICENSE`](LICENSE)). METABRIC data is subject to its own terms via cBioPortal and is not redistributed here.
+## Sources & credit
 
-## Author
+METABRIC: Curtis et al. (*Nature*, 2012); Pereira et al. (*Nat Commun*, 2016), via cBioPortal (Cerami et al. 2012; Gao et al. 2013). PAM50: Parker et al. (*JCO*, 2009). NPI: Galea et al. (1992). Tools: XGBoost (Chen & Guestrin, 2016); SHAP (Lundberg & Lee, 2017).
 
-‹YOUR NAME› — ‹contact / GitHub / LinkedIn›
+## License & author
 
-*This project is for research and educational purposes and is not a medical device or clinical decision tool.*
+Code under the MIT License (see [`LICENSE`](LICENSE)). METABRIC data belongs to its original authors and is not redistributed.
+
+**‹YOUR NAME›** — ‹contact / GitHub / LinkedIn›
+
+*A personal project for learning and curiosity. Not medical advice and not a clinical decision tool.*
