@@ -73,13 +73,13 @@ DeLong tests (paired, same patients):
 | **Clinical + PAM50 vs Clinical** *(key test)* | +0.021 | 0.195 |
 | Clinical + PAM50 vs NPI | +0.045 | **0.040** |
 
-![ROC — three models](outputs/roc_clinical_vs_pam50.png)
+![ROC — three models](clinical_pam50/roc_clinical_vs_pam50.png)
 
 On this single split, only the *cumulative* clinical+PAM50 model significantly beats the bare NPI index (p = 0.040); neither incremental step (clinical over NPI, or PAM50 over clinical) is individually significant, and the ROC curves for the two XGBoost models are nearly superimposed. A single split is noisy, though — see the repeated-CV analysis below, which resolves the ambiguity.
 
 **SHAP (clinical + PAM50 model).** Standard clinical drivers (age, tumour size/nodes, receptor status) dominate; PAM50 genes contribute modestly — consistent with expression being largely correlated with, rather than additive to, clinical variables.
 
-![SHAP summary](outputs/shap_both_beeswarm.png)
+![SHAP summary](clinical_pam50/shap_both_beeswarm.png)
 
 ### 3. Repeated cross-validation (25 stratified splits) — the robustness check
 
@@ -97,8 +97,8 @@ Paired ΔAUROC across splits (positive = first model better):
 | PAM50 + clinical vs clinical | +0.006 | −0.034 to +0.033 | 68% |
 | PAM50 + clinical vs NPI | +0.042 | +0.006 to +0.085 | 100% |
 
-![AUROC across repeats](outputs/auroc_boxplot_repcv.png)
-![ΔAUROC distribution](outputs/delta_auroc_pam50_repcv.png)
+![AUROC across repeats](clinical_pam50_cv/auroc_boxplot_repcv.png)
+![ΔAUROC distribution](clinical_pam50_cv/delta_auroc_pam50_repcv.png)
 
 The repeated analysis sharpens the conclusion:
 
